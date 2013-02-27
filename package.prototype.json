@@ -1,0 +1,6 @@
+{
+	"scripts": {
+		"deploy": "./.sm/bin/deploy",
+		"run": "./.sm/bin/run"		
+	}
+}
