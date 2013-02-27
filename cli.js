@@ -312,6 +312,27 @@ console.log("error", error);
 			return callback(null);
 		});
 */
+/*
+var args = [ "create" ];
+if (programConfig.flavor && [
+	"live",
+	"sandbox"
+].indexOf(programConfig.flavor) !== -1) {
+	args.push("-f", programConfig.flavor);
+} else {
+	args.push("-f", "sandbox");
+}
+args.push(name);
+// TODO: https://github.com/dotcloud/dotcloud-cli/issues/31
+return OS.spawnInline("dotcloud", args, {
+	cwd: PATH.join(programPath, "dist/dotcloud"),
+	env: {
+		PWD: PATH.join(programPath, "dist/dotcloud")
+	}
+}).then(function() {
+	return callback(null);
+}).fail(callback);
+*/
 		return OS.spawnInline(PATH.join(__dirname, "bin/dotcloud-create"), args, {
 			cwd: PATH.join(distPath, "dotcloud"),
 			env: {
