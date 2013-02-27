@@ -1,12 +1,12 @@
 {
     "name": "freedom-platform-stack-dotcloud",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "private": true,
     "pm": "sm",
     "bin": {
-    	"deploy": "./bin/deploy",
-    	"run": "./bin/run"
-	},
+        "deploy": "./bin/deploy",
+        "run": "./bin/run"
+    },
     "dependencies": {
         "commander": "~1.1.1",
         "sm": "0.3.6-pre.58",
