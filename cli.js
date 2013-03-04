@@ -105,12 +105,13 @@ exports.main = function(callback) {
 		}
 		return sm.export(PATH.join(distPath, "source"), {
 			delete: true
-		}).then(function() {
+		}, function(err) {
+			if (err) return callback(err);
 			return FS.copy(PATH.join(distPath, "source"), PATH.join(distPath, "dotcloud"), function(err) {
 				if (err) return callback(err);
 				return callback(null);
 			});
-		}).fail(callback);
+		});
 	}
 
 	function loadConfig(callback) {
@@ -176,6 +177,68 @@ exports.main = function(callback) {
 			}
 			return copyDir(PATH.join(__dirname, "default"), PATH.join(distPath, "dotcloud"), function(err) {
 				if (err) return callback(err);
+
+				function copyApps(callback) {
+					var wait = WAITFOR.serial(callback);
+					for (var serviceName in dotcloudConfig) {
+						wait(serviceName, function(serviceName, done) {
+							var appRoot = dotcloudConfig[serviceName].approot;
+							return copyDir(
+								PATH.join(__dirname, "default/app", dotcloudConfig[serviceName].type),
+								PATH.join(distPath, "dotcloud", appRoot),
+								function(err) {
+									if (err) return done(err);
+									FS.writeFileSync(PATH.join(distPath, "dotcloud", appRoot, ".program.json"), JSON.stringify({
+										"extends": [
+											appRoot.split("/").map(function() {
+												return "..";
+											}).join("/") + "/.program.json"
+										]
+									}, null, 4));
+									/*
+									// NOTE: `extends` in program.json for app will always point to TOP `program.json`.
+									var descriptor = new JSON_STORE.JsonStore(PATH.join(distPath, "dotcloud", appRoot, "program.json"));
+									if (descriptor.has(["extends"])) {
+										var paths = descriptor.get(["extends"]);
+										paths.forEach(function(path, index) {
+											if (!/^\./.test(path)) return;
+											if (!/^\.\./.test(PATH.dirname(path))) return;
+											// Adjust extends for app in case we are using package that contains app as a dependency.
+											paths[index] = appRoot.split("/").map(function() {
+												return "..";
+											}).join("/") + "/" + PATH.basename(path);
+										});
+										descriptor.set(["extends"], paths);
+									}
+									*/
+									return done();
+								}
+							);
+						});
+					}
+					return wait();
+				}
+
+				if (PINF.parent()) {
+					var json = JSON.parse(FS.readFileSync(PATH.join(distPath, "dotcloud/.program.json")));
+					json.config = UTIL.deepMerge(json.config || {}, PINF.parent()._descriptor.config || {});
+					// TODO: Also merge `json.env`. Before we can do that we have to change
+					//		 `["<-", "../environment.json"]` to `{"$__INJECT[../environment.json]": ""}`
+					FS.writeFileSync(PATH.join(distPath, "dotcloud/.program.json"), JSON.stringify(json, null, 4));
+				}
+
+				if (programConfig.options.pushSm) {
+					if (typeof process.env.SM_HOME === "undefined") {
+						return callback(new Error("`SM_HOME` environment variable must be set when using `options.pushSm`"));
+					}
+					console.log("Exporting '" + PATH.join(process.env.SM_HOME, "node_modules/sm") + "' to '" + PATH.join(distPath, "dotcloud/node_modules/sm") + "'.");
+					return SM.for(PATH.join(process.env.SM_HOME, "node_modules/sm")).export(PATH.join(distPath, "dotcloud/node_modules/sm"), {
+						delete: false
+					}, function(err) {
+						if (err) return callback(err);
+						return copyApps(callback);
+					});
+				} else
 				if (!status.children["sm"]) {
 					try {
 						var ns = ["dependencies", "sm"];
@@ -183,55 +246,11 @@ exports.main = function(callback) {
 						if (!descriptor.has(ns)) {
 							descriptor.set(ns, JSON.parse(FS.readFileSync(PATH.join(__dirname, "package.json"))).dependencies.sm);
 						}
-						if (PINF.parent()) {
-							var json = JSON.parse(FS.readFileSync(PATH.join(distPath, "dotcloud/.program.json")));
-							json.config = UTIL.deepMerge(json.config || {}, PINF.parent()._descriptor.config);
-							// TODO: Also merge `json.env`. Before we can do that we have to change
-							//		 `["<-", "../environment.json"]` to `{"$__INJECT[../environment.json]": ""}`
-							FS.writeFileSync(PATH.join(distPath, "dotcloud/.program.json"), JSON.stringify(json, null, 4));
-						}
 					} catch(err) {
 						return callback(err);
 					}
 				}
-				var wait = WAITFOR.serial(callback);
-				for (var serviceName in dotcloudConfig) {
-					wait(serviceName, function(serviceName, done) {
-						var appRoot = dotcloudConfig[serviceName].approot;
-						return copyDir(
-							PATH.join(__dirname, "default/app", dotcloudConfig[serviceName].type),
-							PATH.join(distPath, "dotcloud", appRoot),
-							function(err) {
-								if (err) return done(err);
-								FS.writeFileSync(PATH.join(distPath, "dotcloud", appRoot, ".program.json"), JSON.stringify({
-									"extends": [
-										appRoot.split("/").map(function() {
-											return "..";
-										}).join("/") + "/.program.json"
-									]
-								}, null, 4));
-								/*
-								// NOTE: `extends` in program.json for app will always point to TOP `program.json`.
-								var descriptor = new JSON_STORE.JsonStore(PATH.join(distPath, "dotcloud", appRoot, "program.json"));
-								if (descriptor.has(["extends"])) {
-									var paths = descriptor.get(["extends"]);
-									paths.forEach(function(path, index) {
-										if (!/^\./.test(path)) return;
-										if (!/^\.\./.test(PATH.dirname(path))) return;
-										// Adjust extends for app in case we are using package that contains app as a dependency.
-										paths[index] = appRoot.split("/").map(function() {
-											return "..";
-										}).join("/") + "/" + PATH.basename(path);
-									});
-									descriptor.set(["extends"], paths);
-								}
-								*/
-								return done();
-							}
-						);
-					});
-				}
-				return wait();
+				return copyApps(callback);
 			});
 		});
 	}
