@@ -170,6 +170,17 @@ exports.main = function(callback) {
 						if (path === "dotcloud.yml" && dotcloudConfig) {
 							FS.writeFileSync(PATH.join(toPath, path), YAMLJS.stringify(dotcloudConfig, 5, 4));
 							return false;
+						} else
+						if (path === ".Makefile") {
+							var content = FS.readFileSync(PATH.join(fromPath, path)).toString();
+							if (process.env.PINF_DEBUG) {
+								content = content.replace(/(export PINF_DEBUG:=)\n/, "$1" + process.env.PINF_DEBUG + "\n");
+							}
+							if (process.env.PINF_VERBOSE) {
+								content = content.replace(/(export PINF_VERBOSE:=)\n/, "$1" + process.env.PINF_VERBOSE + "\n");
+							}
+							FS.writeFileSync(PATH.join(toPath, path), content);
+							return false;
 						}
 						return true;
 					}
