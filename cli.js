@@ -104,7 +104,8 @@ exports.main = function(callback) {
 			FS.removeSync(PATH.join(distPath, "dotcloud"));
 		}
 		return sm.export(PATH.join(distPath, "source"), {
-			delete: true
+			delete: true,
+			includeDependencies: programConfig.options.pushDependencies || false
 		}, function(err) {
 			if (err) return callback(err);
 			return FS.copy(PATH.join(distPath, "source"), PATH.join(distPath, "dotcloud"), function(err) {
@@ -206,7 +207,16 @@ exports.main = function(callback) {
 											}).join("/") + "/.program.json"
 										]
 									}, null, 4));
+									// If we have a `node_modules/` we rename it for the push so that dotcloud does not
+									// replace it with its own.
+									if (FS.existsSync(PATH.join(distPath, "dotcloud", appRoot, "node_modules"))) {
+										FS.renameSync(
+											PATH.join(distPath, "dotcloud", appRoot, "node_modules"),
+											PATH.join(distPath, "dotcloud", appRoot, "_node_modules")
+										)
+									}
 									/*
+									// TODO: This should not be needed.
 									// NOTE: `extends` in program.json for app will always point to TOP `program.json`.
 									var descriptor = new JSON_STORE.JsonStore(PATH.join(distPath, "dotcloud", appRoot, "program.json"));
 									if (descriptor.has(["extends"])) {
@@ -239,16 +249,18 @@ exports.main = function(callback) {
 				}
 
 				if (programConfig.options.pushSm) {
-					if (typeof process.env.SM_HOME === "undefined") {
-						return callback(new Error("`SM_HOME` environment variable must be set when using `options.pushSm`"));
+					if (!FS.existsSync(PATH.join(distPath, "dotcloud/node_modules/sm"))) {
+						if (typeof process.env.SM_HOME === "undefined") {
+							return callback(new Error("`SM_HOME` environment variable must be set when using `options.pushSm`"));
+						}
+						console.log("Exporting '" + PATH.join(process.env.SM_HOME, "node_modules/sm") + "' to '" + PATH.join(distPath, "dotcloud/node_modules/sm") + "'.");
+						return SM.for(PATH.join(process.env.SM_HOME, "node_modules/sm")).export(PATH.join(distPath, "dotcloud/node_modules/sm"), {
+							delete: false
+						}, function(err) {
+							if (err) return callback(err);
+							return copyApps(callback);
+						});
 					}
-					console.log("Exporting '" + PATH.join(process.env.SM_HOME, "node_modules/sm") + "' to '" + PATH.join(distPath, "dotcloud/node_modules/sm") + "'.");
-					return SM.for(PATH.join(process.env.SM_HOME, "node_modules/sm")).export(PATH.join(distPath, "dotcloud/node_modules/sm"), {
-						delete: false
-					}, function(err) {
-						if (err) return callback(err);
-						return copyApps(callback);
-					});
 				} else
 				if (!status.children["sm"]) {
 					try {
